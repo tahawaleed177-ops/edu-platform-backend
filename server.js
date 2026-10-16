@@ -49,4 +49,5 @@ app.get('/', (req, res) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`الخادم يعمل الآن على الرابط: http://localhost:${PORT}`);
+    module.exports = app;
 });
