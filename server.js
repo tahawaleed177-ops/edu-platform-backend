@@ -5,9 +5,6 @@ require('dotenv').config(); // ضروري لاستدعاء المتغيرات ا
 
 // استدعاء ملف الاتصال بقاعدة البيانات
 const { Pool } = require('pg');
-require('dotenv').config();
-
-const { Pool } = require('pg');
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
