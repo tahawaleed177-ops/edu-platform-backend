@@ -51,7 +51,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/materials', materialRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/subjects', subjectRoutes);
-
+app.use('/api/announcements', require('./routes/announcementRoutes'));
 // إنشاء مسار (رابط) تجريبي للتأكد من أن الخادم يعمل
 app.get('/', (req, res) => {
     res.send('مرحباً بك.. خادم المنصة التعليمية يعمل بنجاح!');
