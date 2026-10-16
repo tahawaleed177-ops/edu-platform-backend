@@ -49,9 +49,8 @@ exports.login = async (req, res) => {
             return res.status(400).json({ success: false, message: 'كلمة المرور غير صحيحة.' });
         }
 
-        // === التعديل تم هنا: أخذ الصلاحية من قاعدة البيانات بدلاً من الكود الثابت ===
-        const isAdmin = user.is_admin === true; // قراءة القيمة من العمود الذي أضفته
-
+       // قراءة صلاحية الأدمن مباشرة من العمود الجديد في قاعدة البيانات
+        const isAdmin = user.is_Admin === true;
         const token = jwt.sign(
             { 
                 id: user.id, 
