@@ -50,7 +50,7 @@ exports.login = async (req, res) => {
         }
 
        // قراءة صلاحية الأدمن مباشرة من العمود الجديد في قاعدة البيانات
-        const isAdmin = user.is_Admin === true;
+        const isAdmin = user.is_Admin === true || user.is_admin === true;
         const token = jwt.sign(
             { 
                 id: user.id, 
