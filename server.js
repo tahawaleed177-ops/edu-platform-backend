@@ -4,7 +4,17 @@ const path = require('path'); // تمت الإضافة لضمان قراءة م�
 require('dotenv').config(); // ضروري لاستدعاء المتغيرات السرية
 
 // استدعاء ملف الاتصال بقاعدة البيانات
-const pool = require('./config/db'); 
+const { Pool } = require('pg');
+require('dotenv').config();
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false // هذا السطر ضروري جداً جداً للاتصال بـ Supabase
+  }
+});
+
+module.exports = pool;
 
 // استدعاء مسارات المنصة
 const userRoutes = require('./routes/userRoutes');
