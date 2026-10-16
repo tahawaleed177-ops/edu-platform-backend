@@ -35,9 +35,9 @@ app.use(express.json());
 
 // تفعيل CORS للسماح بالاتصال من واجهات المستخدم (الفرونت إند)
 app.use(cors({
-    origin: 'https://edu-platform-frontend-iota.vercel.app',
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    credentials: true
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
 }));
 // السماح بالوصول المباشر لمجلد الملفات المرفوعة (لفتح الـ PDF)
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
