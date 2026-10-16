@@ -1,13 +1,19 @@
 const pool = require('../config/db');
-const fs = require('fs');
+const { createClient } = require('@supabase/supabase-js');
 const path = require('path');
+
+// تهيئة الاتصال بـ Supabase من أجل التخزين السحابي
+const supabaseUrl = 'https://xllrhmfuqwbxwzivwkdi.supabase.co'; // رابط مشروعك في سوبابيس
+// استبدل الـ key أدناه بمفتاح anon key الخاص بمشروعك (تأخذه من Supabase -> Project Settings -> API)
+const supabaseKey = process.env.SUPABASE_ANON_KEY; 
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 // 1. جلب المحاضرات الخاصة بمادة معينة
 const getMaterialsBySubject = async (req, res) => {
     try {
         const subjectId = req.params.subjectId || req.params.id;
         const result = await pool.query(
-            'SELECT * FROM materials WHERE subject_id = \$1 ORDER BY id DESC',
+            'SELECT * FROM materials WHERE subject_id = $1 ORDER BY id DESC',
             [subjectId]
         );
         res.json({ success: true, materials: result.rows });
@@ -17,7 +23,7 @@ const getMaterialsBySubject = async (req, res) => {
     }
 };
 
-// 2. رفع محاضرة جديدة (للإدارة فقط)
+// 2. رفع محاضرة جديدة (للإدارة فقط) - التخزين السحابي
 const uploadMaterial = async (req, res) => {
     try {
         if (!req.user || (!req.user.isAdmin && req.user.email !== 'tahawaleed177@gmail.com')) {
@@ -30,10 +36,35 @@ const uploadMaterial = async (req, res) => {
             return res.status(400).json({ success: false, message: 'يرجى اختيار ملف PDF لرفعه.' });
         }
 
-        const file_url = `/uploads/${req.file.filename}`;
+        // إنشاء اسم فريد للملف لتجنب التكرار في Supabase
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        const fileName = uniqueSuffix + path.extname(req.file.originalname);
 
+        // رفع الملف إلى دلو 'lectures' في Supabase
+        const { data: uploadData, error: uploadError } = await supabase
+            .storage
+            .from('lectures')
+            .upload(fileName, req.file.buffer, {
+                contentType: req.file.mimetype,
+                upsert: false
+            });
+
+        if (uploadError) {
+            console.error('Supabase Upload Error:', uploadError);
+            return res.status(500).json({ success: false, message: 'فشل رفع الملف إلى التخزين السحابي.' });
+        }
+
+        // استخراج الرابط العام (Public URL) للمحاضرة المرفوعة
+        const { data: publicUrlData } = supabase
+            .storage
+            .from('lectures')
+            .getPublicUrl(fileName);
+
+        const file_url = publicUrlData.publicUrl;
+
+        // إدخال البيانات وحفظ الرابط في قاعدة البيانات
         const newMaterial = await pool.query(
-            'INSERT INTO materials (title, description, file_url, subject_id) VALUES (\$1, \$2, \$3, \$4) RETURNING *',
+            'INSERT INTO materials (title, description, file_url, subject_id) VALUES ($1, $2, $3, $4) RETURNING *',
             [title, description, file_url, subject_id]
         );
 
@@ -48,7 +79,7 @@ const uploadMaterial = async (req, res) => {
     }
 };
 
-// 3. حذف محاضرة من قاعدة البيانات ومن مجلد uploads (للإدارة فقط)
+// 3. حذف محاضرة من قاعدة البيانات ومن Supabase (للإدارة فقط)
 const deleteMaterial = async (req, res) => {
     try {
         if (!req.user || (!req.user.isAdmin && req.user.email !== 'tahawaleed177@gmail.com')) {
@@ -57,28 +88,31 @@ const deleteMaterial = async (req, res) => {
 
         const materialId = req.params.id;
 
-        // البحث عن المحاضرة لمعرفة مسار الملف قبل حذفه
-        const result = await pool.query('SELECT * FROM materials WHERE id = \$1', [materialId]);
+        const result = await pool.query('SELECT * FROM materials WHERE id = $1', [materialId]);
         if (result.rows.length === 0) {
             return res.status(404).json({ success: false, message: 'المحاضرة غير موجودة.' });
         }
 
         const material = result.rows[0];
 
-        // حذف ملف الـ PDF الفعلي من مجلد uploads
-        if (material.file_url) {
-            const cleanRelativePath = material.file_url.startsWith('/')
-                ? material.file_url.slice(1)
-                : material.file_url;
-            const filePath = path.join(__dirname, '..', cleanRelativePath);
+        // حذف ملف الـ PDF من Supabase Storage
+        if (material.file_url && material.file_url.includes('supabase.co')) {
+            // استخراج اسم الملف من الرابط العام
+            const fileUrlParts = material.file_url.split('/');
+            const fileName = fileUrlParts[fileUrlParts.length - 1];
+            
+            const { error: removeError } = await supabase
+                .storage
+                .from('lectures')
+                .remove([fileName]);
 
-            if (fs.existsSync(filePath)) {
-                fs.unlinkSync(filePath);
+            if (removeError) {
+                console.error('Error removing from Supabase:', removeError);
             }
         }
 
         // حذف السجل من قاعدة البيانات
-        await pool.query('DELETE FROM materials WHERE id = \$1', [materialId]);
+        await pool.query('DELETE FROM materials WHERE id = $1', [materialId]);
 
         res.json({ success: true, message: 'تم حذف المحاضرة وملفها بنجاح.' });
     } catch (error) {
