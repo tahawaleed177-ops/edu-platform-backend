@@ -7,12 +7,16 @@ require('dotenv').config(); // ضروري لاستدعاء المتغيرات ا
 const { Pool } = require('pg');
 require('dotenv').config();
 
+const { Pool } = require('pg');
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: {
-    rejectUnauthorized: false // هذا السطر ضروري جداً جداً للاتصال بـ Supabase
+    rejectUnauthorized: false
   }
 });
+
+module.exports = pool;
 
 module.exports = pool;
 
