@@ -17,7 +17,7 @@ exports.register = async (req, res) => {
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
 
-        // إدخال البيانات في الأعمدة الصحيحة (full_name و password_hash)
+        // إدخال البيانات في الأعمدة الصحيحة (الآن بدون تحديد is_admin لأنها ستكون false افتراضياً)
         await pool.query(
             'INSERT INTO users (full_name, email, password_hash) VALUES ($1, $2, $3)',
             [name, email, hashedPassword]
@@ -49,22 +49,21 @@ exports.login = async (req, res) => {
             return res.status(400).json({ success: false, message: 'كلمة المرور غير صحيحة.' });
         }
 
-        // إعطاء صلاحية الأدمن إذا كان الإيميل هو إيميلك أو إذا كان دوره أدمن في الجدول
-        const isAdmin = user.email === 'tahawaleed177@gmail.com' || user.role === 'admin';
+        // === التعديل تم هنا: أخذ الصلاحية من قاعدة البيانات بدلاً من الكود الثابت ===
+        const isAdmin = user.is_admin === true; // قراءة القيمة من العمود الذي أضفته
 
-        // === التعديل تم هنا: إضافة full_name إلى التوكن المشفر ===
         const token = jwt.sign(
             { 
                 id: user.id, 
                 email: user.email, 
                 isAdmin, 
-                full_name: user.full_name // <--- هذا هو السطر الذي أضفناه
+                full_name: user.full_name 
             }, 
             process.env.JWT_SECRET || 'edu_platform_secret_key_taha', 
             { expiresIn: '7d' } 
         );
 
-        // نرسل full_name للفرونت إند ليتم عرضه
+        // نرسل البيانات للفرونت إند ليتم عرضها واستخدامها
         res.json({ success: true, token, user: { id: user.id, name: user.full_name, email: user.email, isAdmin } });
     } catch (error) {
         console.error('Error in login:', error);

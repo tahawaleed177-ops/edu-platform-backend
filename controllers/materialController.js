@@ -121,7 +121,7 @@ const uploadMaterial = async (req, res) => {
 // 3. حذف محاضرة من قاعدة البيانات ومن Supabase (للإدارة فقط)
 const deleteMaterial = async (req, res) => {
     try {
-        if (!req.user || (!req.user.isAdmin && req.user.email !== 'tahawaleed177@gmail.com')) {
+        if (!req.user || !req.user.isAdmin) {
             return res.status(403).json({ success: false, message: 'عذراً، حذف المحاضرات مخصص للإدارة فقط.' });
         }
 

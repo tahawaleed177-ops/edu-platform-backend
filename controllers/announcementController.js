@@ -15,7 +15,7 @@ const getAllAnnouncements = async (req, res) => {
 const createAnnouncement = async (req, res) => {
     try {
         // التحقق من أن المستخدم مدير
-        if (!req.user || (!req.user.isAdmin && req.user.email !== 'tahawaleed177@gmail.com')) {
+        if (!req.user || !req.user.isAdmin) {
             return res.status(403).json({ success: false, message: 'عذراً، إضافة التبليغات مخصصة للإدارة فقط.' });
         }
 
@@ -76,7 +76,7 @@ ${content}
 // 3. حذف التبليغ (للإدارة فقط)
 const deleteAnnouncement = async (req, res) => {
     try {
-        if (!req.user || (!req.user.isAdmin && req.user.email !== 'tahawaleed177@gmail.com')) {
+        if (!req.user || !req.user.isAdmin) {
             return res.status(403).json({ success: false, message: 'عذراً، حذف التبليغات مخصص للإدارة فقط.' });
         }
 
