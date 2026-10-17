@@ -26,11 +26,12 @@ exports.askMireo = async (req, res) => {
         const shuffledKeys = apiKeys.sort(() => 0.5 - Math.random());
         let response = null;
         let success = false;
+        let lastError = null;
 
         for (const apiKey of shuffledKeys) {
             try {
                 response = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
-                    model: 'llama-3.3-70b-versatile', // تم استخدام هذا النموذج لأنه الأقوى والأكثر دعماً واستقراراً على Groq
+                    model: 'llama-3.3-70b-versatile', 
                     messages: [
                         { role: 'system', content: systemPrompt },
                         { role: 'user', content: fullMessage }
@@ -46,12 +47,13 @@ exports.askMireo = async (req, res) => {
                 success = true;
                 break; 
             } catch (err) {
+                lastError = err;
                 if (err.response && (err.response.status === 429 || err.response.status >= 500)) {
                     console.log(`تم تجاوز الحد لمفتاح معين، جاري التبديل...`);
                     continue; 
                 } else {
                     console.error('API Error details:', err.response?.data || err.message);
-                    continue; // حاول مع المفتاح التالي حتى لو كان خطأ آخر
+                    continue; 
                 }
             }
         }
@@ -59,11 +61,12 @@ exports.askMireo = async (req, res) => {
         if (success && response) {
             res.json({ success: true, reply: response.data.choices[0].message.content });
         } else {
-            res.status(500).json({ success: false, message: 'يبدو أن هناك ضغطاً عالياً على ميريو حالياً. يرجى المحاولة بعد قليل.' });
+            const errorMsg = lastError?.response?.data?.error?.message || lastError?.message || 'خطأ غير معروف';
+            res.status(500).json({ success: false, message: `ضغط عالٍ أو خطأ في API. (تفاصيل: ${errorMsg})` });
         }
 
     } catch (error) {
         console.error('Mireo Error:', error.message);
-        res.status(500).json({ success: false, message: 'حدث خطأ غير متوقع.' });
+        res.status(500).json({ success: false, message: `حدث خطأ داخلي. (تفاصيل: ${error.message})` });
     }
 };
