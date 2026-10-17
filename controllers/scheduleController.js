@@ -12,17 +12,19 @@ exports.getSchedule = async (req, res) => {
 };
 
 // إضافة محاضرة جديدة (للمشرفين فقط)
+// إضافة محاضرة جديدة (للمشرفين فقط)
 exports.addScheduleItem = async (req, res) => {
     try {
         if (!req.user || !req.user.isAdmin) {
             return res.status(403).json({ success: false, message: 'غير مصرح لك بإضافة محاضرات للجدول.' });
         }
 
-        const { day_index, day_name, subject_name, start_time, end_time, location } = req.body;
+        // تم إضافة group_name هنا
+        const { day_index, day_name, subject_name, start_time, end_time, location, group_name } = req.body;
 
         const result = await pool.query(
-            'INSERT INTO study_schedule (day_index, day_name, subject_name, start_time, end_time, location) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-            [day_index, day_name, subject_name, start_time, end_time, location]
+            'INSERT INTO study_schedule (day_index, day_name, subject_name, start_time, end_time, location, group_name) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+            [day_index, day_name, subject_name, start_time, end_time, location, group_name || 'الكل']
         );
 
         res.status(201).json({ success: true, message: 'تم إضافة المحاضرة إلى الجدول بنجاح.', item: result.rows[0] });
