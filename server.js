@@ -21,6 +21,7 @@ const subjectRoutes = require('./routes/subjectRoutes');
 const scheduleRoutes = require('./routes/scheduleRoutes'); // === التعديل 1: استدعاء مسار الجدول ===
 const favoriteRoutes = require('./routes/favoriteRoutes');
 const progressRoutes = require('./routes/progressRoutes');
+const chatRoutes = require('./routes/chatRoutes');
 // تهيئة تطبيق الخادم
 const app = express();
 
@@ -53,6 +54,7 @@ app.use('/api/announcements', require('./routes/announcementRoutes'));
 app.use('/api/schedule', scheduleRoutes); // === التعديل 2: تفعيل مسار الجدول ===
 app.use('/api/favorites', favoriteRoutes);
 app.use('/api/progress', progressRoutes); // أضف هذا السطر
+app.use('/api/chat', chatRoutes);
 // إنشاء مسار (رابط) تجريبي للتأكد من أن الخادم يعمل
 app.get('/', (req, res) => {
     res.send('مرحباً بك.. خادم المنصة التعليمية يعمل بنجاح!');
