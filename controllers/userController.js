@@ -177,3 +177,40 @@ module.exports = {
     updateProfile,
     changePassword
 };
+// 6. إدارة صلاحيات المشرفين (للمديرين فقط)
+const toggleAdminRole = async (req, res) => {
+    try {
+        const { email, makeAdmin } = req.body; // makeAdmin ستكون true للترقية أو false للإلغاء
+        const currentAdminId = req.user.id;
+
+        if (!email?.trim()) {
+            return res.status(400).json({ success: false, message: "يرجى إدخال البريد الإلكتروني للمستخدم" });
+        }
+
+        const normalizedEmail = email.trim().toLowerCase();
+
+        // التحقق من وجود المستخدم في قاعدة البيانات
+        const userResult = await pool.query("SELECT id, is_admin FROM users WHERE LOWER(email) = \$1", [normalizedEmail]);
+
+        if (userResult.rows.length === 0) {
+            return res.status(404).json({ success: false, message: "لا يوجد حساب مسجل بهذا البريد الإلكتروني." });
+        }
+
+        const targetUser = userResult.rows[0];
+
+        // حماية أمنية: منع المدير من إزالة صلاحيات نفسه بالخطأ!
+        if (targetUser.id === currentAdminId && makeAdmin === false) {
+            return res.status(403).json({ success: false, message: "لا يمكنك إلغاء صلاحيات الإدارة عن نفسك." });
+        }
+
+        // تحديث حالة is_admin في قاعدة البيانات
+        await pool.query("UPDATE users SET is_admin = \$1 WHERE id = \$2", [makeAdmin, targetUser.id]);
+
+        const actionText = makeAdmin ? "ترقيته إلى مدير منصة" : "إلغاء صلاحياته الإدارية وإعادته كطالب";
+        res.status(200).json({ success: true, message: `تم ${actionText} بنجاح.` });
+
+    } catch (err) {
+        console.error("Error in toggleAdminRole:", err.message);
+        res.status(500).json({ success: false, message: "حدث خطأ في الخادم أثناء تعديل الصلاحيات." });
+    }
+};
