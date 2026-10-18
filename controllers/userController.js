@@ -54,7 +54,6 @@ const loginUser = async (req, res) => {
 
         const normalizedEmail = email.trim().toLowerCase();
 
-        // التعديل هنا: جلب الأعمدة الجديدة study_type و section
         const userResult = await pool.query("SELECT id, full_name, email, password_hash, is_admin, study_type, section FROM users WHERE LOWER(email) = \$1", [normalizedEmail]);
         if (userResult.rows.length === 0) {
             return res.status(404).json({ success: false, message: "بيانات الدخول غير صحيحة" });
@@ -67,7 +66,6 @@ const loginUser = async (req, res) => {
             return res.status(400).json({ success: false, message: "بيانات الدخول غير صحيحة" });
         }
 
-        // التعديل هنا: إضافة studyType و section للـ token
         const token = jwt.sign(
             { id: user.id, email: user.email, isAdmin: user.is_admin, studyType: user.study_type, section: user.section }, 
             process.env.JWT_SECRET || 'edu_platform_secret_key_taha',            
@@ -78,7 +76,6 @@ const loginUser = async (req, res) => {
             success: true, 
             message: "تم تسجيل الدخول بنجاح", 
             token: token,
-            // التعديل هنا: إرسال الأعمدة الجديدة مع استجابة الدخول
             user: { 
                 id: user.id, 
                 name: user.full_name, 
@@ -98,7 +95,6 @@ const loginUser = async (req, res) => {
 // 3. جلب جميع المستخدمين
 const getAllUsers = async (req, res) => {
     try {
-        // التعديل هنا: جلب الأعمدة الجديدة
         const all_users = await pool.query("SELECT id, full_name, email, is_admin, study_type, section, created_at FROM users");
         res.status(200).json({ success: true, users: all_users.rows });
     } catch (err) {
@@ -110,7 +106,6 @@ const getAllUsers = async (req, res) => {
 // 4. تحديث اسم المستخدم (Profile)
 const updateProfile = async (req, res) => {
     try {
-        // التعديل هنا: استقبال الحقول الجديدة من الفرونت إند
         const { name, study_type, section } = req.body;
         const userId = req.user.id; 
 
@@ -118,7 +113,6 @@ const updateProfile = async (req, res) => {
             return res.status(400).json({ success: false, message: "يرجى إدخال الاسم الجديد" });
         }
 
-        // التعديل هنا: تحديث الأعمدة الجديدة في قاعدة البيانات
         const updatedUser = await pool.query(
             "UPDATE users SET full_name = \$1, study_type = \$2, section = \$3 WHERE id = \$4 RETURNING id, full_name, email, is_admin, study_type, section",
             [name.trim(), study_type || null, section || null, userId]
@@ -136,8 +130,8 @@ const updateProfile = async (req, res) => {
                 name: updatedUser.rows[0].full_name, 
                 email: updatedUser.rows[0].email,
                 isAdmin: updatedUser.rows[0].is_admin,
-                studyType: updatedUser.rows[0].study_type, // إرسال نوع الدراسة المحدث
-                section: updatedUser.rows[0].section // إرسال الشعبة المحدثة
+                studyType: updatedUser.rows[0].study_type,
+                section: updatedUser.rows[0].section
             } 
         });
     } catch (err) {
@@ -180,11 +174,11 @@ const changePassword = async (req, res) => {
     }
 };
 
-// 6. إدارة صلاحيات المشرفين (ترقية / إزالة إشراف)
+// 6. إدارة صلاحيات المشرفين
 const toggleAdminRole = async (req, res) => {
     try {
         const { email, makeAdmin } = req.body; 
-        const currentAdminId = req.user.id; // المدير الذي ينفذ العملية حالياً
+        const currentAdminId = req.user.id;
 
         if (!email?.trim()) {
             return res.status(400).json({ success: false, message: "يرجى إدخال البريد الإلكتروني للمستخدم" });
@@ -192,7 +186,6 @@ const toggleAdminRole = async (req, res) => {
 
         const normalizedEmail = email.trim().toLowerCase();
 
-        // التأكد من وجود الحساب المستهدف
         const userResult = await pool.query("SELECT id, is_admin FROM users WHERE LOWER(email) = \$1", [normalizedEmail]);
 
         if (userResult.rows.length === 0) {
@@ -201,12 +194,10 @@ const toggleAdminRole = async (req, res) => {
 
         const targetUser = userResult.rows[0];
 
-        // حماية أمنية: منع المدير من إزالة صلاحياته بنفسه بالخطأ!
         if (targetUser.id === currentAdminId && makeAdmin === false) {
             return res.status(403).json({ success: false, message: "لا يمكنك إلغاء صلاحيات الإدارة عن نفسك." });
         }
 
-        // تحديث الصلاحية
         await pool.query("UPDATE users SET is_admin = \$1 WHERE id = \$2", [makeAdmin, targetUser.id]);
 
         const actionText = makeAdmin ? "ترقيته إلى مدير منصة" : "إلغاء صلاحياته الإدارية";
@@ -218,11 +209,27 @@ const toggleAdminRole = async (req, res) => {
     }
 };
 
+// 7. جلب الطلاب حسب الشعبة (مخصصة لنظام الحضور بالباركود)
+const getStudentsBySection = async (req, res) => {
+    try {
+        const { section } = req.params;
+        const result = await pool.query(
+            "SELECT id, full_name, email, section, study_type FROM users WHERE section = \$1 AND is_admin = FALSE ORDER BY full_name ASC",
+            [section]
+        );
+        res.status(200).json({ success: true, students: result.rows });
+    } catch (err) {
+        console.error("Error in getStudentsBySection:", err.message);
+        res.status(500).json({ success: false, message: "حدث خطأ أثناء جلب قائمة الطلاب." });
+    }
+};
+
 module.exports = {
     createUser,
     loginUser,
     getAllUsers,
     updateProfile,
     changePassword,
-    toggleAdminRole 
+    toggleAdminRole,
+    getStudentsBySection // 👈 دالة جلب الطلاب للحضور
 };

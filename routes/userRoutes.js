@@ -28,4 +28,5 @@ router.put('/change-password', verifyToken, userController.changePassword);
 // 6. مسار إدارة المشرفين (يتطلب verifyToken + verifyAdmin)
 router.put('/admin-role', verifyToken, verifyAdmin, userController.toggleAdminRole);
 
+router.get('/section/:section', verifyToken, verifyAdmin, userController.getStudentsBySection);
 module.exports = router;
