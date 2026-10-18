@@ -18,7 +18,7 @@ exports.verifyToken = (req, res, next) => {
         // فك تشفير التوكن بنفس الكلمة السرية التي استخدمناها في تسجيل الدخول
         const verified = jwt.verify(token, process.env.JWT_SECRET || 'edu_platform_secret_key_taha');
         
-        // إرفاق بيانات المستخدم (id, email, isAdmin) بالطلب ليتم استخدامها لاحقاً
+        // إرفاق بيانات المستخدم (id, email, isAdmin/role) بالطلب ليتم استخدامها لاحقاً
         req.user = verified; 
         
         next(); // السماح بالمرور للخطوة التي بعدها
@@ -29,8 +29,8 @@ exports.verifyToken = (req, res, next) => {
 
 // 2. حارس التحقق من الصلاحيات (هل المستخدم مدير؟)
 exports.verifyAdmin = (req, res, next) => {
-    // نتحقق مما إذا كان المستخدم موجوداً، وهل خاصية isAdmin لديه تساوي true
-    if (!req.user || !req.user.isAdmin) {
+    // نتحقق مما إذا كان المستخدم موجوداً، وهل يمتلك صلاحية الإدارة
+    if (!req.user || (req.user.role !== 'admin' && req.user.isAdmin !== true)) {
         return res.status(403).json({ success: false, message: 'صلاحيات مرفوضة. هذا الإجراء مسموح للمديرين فقط.' });
     }
     
