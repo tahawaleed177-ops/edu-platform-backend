@@ -54,7 +54,8 @@ const loginUser = async (req, res) => {
 
         const normalizedEmail = email.trim().toLowerCase();
 
-        const userResult = await pool.query("SELECT id, full_name, email, password_hash, is_admin FROM users WHERE LOWER(email) = \$1", [normalizedEmail]);
+        // التعديل هنا: جلب الأعمدة الجديدة study_type و section
+        const userResult = await pool.query("SELECT id, full_name, email, password_hash, is_admin, study_type, section FROM users WHERE LOWER(email) = \$1", [normalizedEmail]);
         if (userResult.rows.length === 0) {
             return res.status(404).json({ success: false, message: "بيانات الدخول غير صحيحة" });
         }
@@ -66,8 +67,9 @@ const loginUser = async (req, res) => {
             return res.status(400).json({ success: false, message: "بيانات الدخول غير صحيحة" });
         }
 
+        // التعديل هنا: إضافة studyType و section للـ token
         const token = jwt.sign(
-            { id: user.id, email: user.email, isAdmin: user.is_admin }, 
+            { id: user.id, email: user.email, isAdmin: user.is_admin, studyType: user.study_type, section: user.section }, 
             process.env.JWT_SECRET || 'edu_platform_secret_key_taha',            
             { expiresIn: '7d' }                
         );
@@ -76,7 +78,15 @@ const loginUser = async (req, res) => {
             success: true, 
             message: "تم تسجيل الدخول بنجاح", 
             token: token,
-            user: { id: user.id, name: user.full_name, email: user.email, isAdmin: user.is_admin }
+            // التعديل هنا: إرسال الأعمدة الجديدة مع استجابة الدخول
+            user: { 
+                id: user.id, 
+                name: user.full_name, 
+                email: user.email, 
+                isAdmin: user.is_admin,
+                studyType: user.study_type,
+                section: user.section
+            }
         });
 
     } catch (err) {
@@ -88,7 +98,8 @@ const loginUser = async (req, res) => {
 // 3. جلب جميع المستخدمين
 const getAllUsers = async (req, res) => {
     try {
-        const all_users = await pool.query("SELECT id, full_name, email, is_admin, created_at FROM users");
+        // التعديل هنا: جلب الأعمدة الجديدة
+        const all_users = await pool.query("SELECT id, full_name, email, is_admin, study_type, section, created_at FROM users");
         res.status(200).json({ success: true, users: all_users.rows });
     } catch (err) {
         console.error(err.message);
@@ -99,16 +110,18 @@ const getAllUsers = async (req, res) => {
 // 4. تحديث اسم المستخدم (Profile)
 const updateProfile = async (req, res) => {
     try {
-        const { name } = req.body;
+        // التعديل هنا: استقبال الحقول الجديدة من الفرونت إند
+        const { name, study_type, section } = req.body;
         const userId = req.user.id; 
 
         if (!name?.trim()) {
             return res.status(400).json({ success: false, message: "يرجى إدخال الاسم الجديد" });
         }
 
+        // التعديل هنا: تحديث الأعمدة الجديدة في قاعدة البيانات
         const updatedUser = await pool.query(
-            "UPDATE users SET full_name = \$1 WHERE id = \$2 RETURNING id, full_name, email, is_admin",
-            [name.trim(), userId]
+            "UPDATE users SET full_name = \$1, study_type = \$2, section = \$3 WHERE id = \$4 RETURNING id, full_name, email, is_admin, study_type, section",
+            [name.trim(), study_type || null, section || null, userId]
         );
 
         if (updatedUser.rows.length === 0) {
@@ -122,7 +135,9 @@ const updateProfile = async (req, res) => {
                 id: updatedUser.rows[0].id, 
                 name: updatedUser.rows[0].full_name, 
                 email: updatedUser.rows[0].email,
-                isAdmin: updatedUser.rows[0].is_admin 
+                isAdmin: updatedUser.rows[0].is_admin,
+                studyType: updatedUser.rows[0].study_type, // إرسال نوع الدراسة المحدث
+                section: updatedUser.rows[0].section // إرسال الشعبة المحدثة
             } 
         });
     } catch (err) {
@@ -209,5 +224,5 @@ module.exports = {
     getAllUsers,
     updateProfile,
     changePassword,
-    toggleAdminRole // تمت إضافة دالة الترقية هنا
+    toggleAdminRole 
 };
