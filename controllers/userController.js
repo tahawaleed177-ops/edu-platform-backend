@@ -5,7 +5,6 @@ const jwt = require('jsonwebtoken');
 // 1. إضافة مستخدم جديد (Register)
 const createUser = async (req, res) => {
     try {
-        // دعم استقبال name أو full_name من الفرونت إند
         const name = req.body.name || req.body.full_name;
         const { email, password } = req.body;
 
@@ -15,7 +14,7 @@ const createUser = async (req, res) => {
 
         const normalizedEmail = email.trim().toLowerCase();
 
-        const userExists = await pool.query("SELECT id FROM users WHERE LOWER(email) = $1", [normalizedEmail]);
+        const userExists = await pool.query("SELECT id FROM users WHERE LOWER(email) = \$1", [normalizedEmail]);
         if (userExists.rows.length > 0) {
             return res.status(400).json({ success: false, message: "البريد الإلكتروني مستخدم بالفعل" });
         }
@@ -23,9 +22,8 @@ const createUser = async (req, res) => {
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
 
-        // إزالة role واستخدام is_admin الافتراضي (FALSE)
         const new_user = await pool.query(
-            "INSERT INTO users (full_name, email, password_hash, is_admin) VALUES ($1, $2, $3, FALSE) RETURNING id, full_name, email, is_admin, created_at",
+            "INSERT INTO users (full_name, email, password_hash, is_admin) VALUES (\$1, \$2, \$3, FALSE) RETURNING id, full_name, email, is_admin, created_at",
             [name.trim(), normalizedEmail, hashedPassword]
         );
 
@@ -56,8 +54,7 @@ const loginUser = async (req, res) => {
 
         const normalizedEmail = email.trim().toLowerCase();
 
-        // استخدام is_admin بدلاً من role
-        const userResult = await pool.query("SELECT id, full_name, email, password_hash, is_admin FROM users WHERE LOWER(email) = $1", [normalizedEmail]);
+        const userResult = await pool.query("SELECT id, full_name, email, password_hash, is_admin FROM users WHERE LOWER(email) = \$1", [normalizedEmail]);
         if (userResult.rows.length === 0) {
             return res.status(404).json({ success: false, message: "بيانات الدخول غير صحيحة" });
         }
@@ -69,7 +66,6 @@ const loginUser = async (req, res) => {
             return res.status(400).json({ success: false, message: "بيانات الدخول غير صحيحة" });
         }
 
-        // إرفاق isAdmin داخل التوكن بدلاً من role
         const token = jwt.sign(
             { id: user.id, email: user.email, isAdmin: user.is_admin }, 
             process.env.JWT_SECRET || 'edu_platform_secret_key_taha',            
@@ -92,7 +88,6 @@ const loginUser = async (req, res) => {
 // 3. جلب جميع المستخدمين
 const getAllUsers = async (req, res) => {
     try {
-        // إزالة استدعاء role من هنا أيضاً
         const all_users = await pool.query("SELECT id, full_name, email, is_admin, created_at FROM users");
         res.status(200).json({ success: true, users: all_users.rows });
     } catch (err) {
@@ -112,7 +107,7 @@ const updateProfile = async (req, res) => {
         }
 
         const updatedUser = await pool.query(
-            "UPDATE users SET full_name = $1 WHERE id = $2 RETURNING id, full_name, email, is_admin",
+            "UPDATE users SET full_name = \$1 WHERE id = \$2 RETURNING id, full_name, email, is_admin",
             [name.trim(), userId]
         );
 
@@ -142,7 +137,7 @@ const changePassword = async (req, res) => {
         const { currentPassword, newPassword } = req.body;
         const userId = req.user.id;
 
-        const userResult = await pool.query("SELECT password_hash FROM users WHERE id = $1", [userId]);
+        const userResult = await pool.query("SELECT password_hash FROM users WHERE id = \$1", [userId]);
         
         if (userResult.rows.length === 0) {
             return res.status(404).json({ success: false, message: "المستخدم غير موجود" });
@@ -159,7 +154,7 @@ const changePassword = async (req, res) => {
         const hashedNewPassword = await bcrypt.hash(newPassword, salt);
 
         await pool.query(
-            "UPDATE users SET password_hash = $1 WHERE id = $2",
+            "UPDATE users SET password_hash = \$1 WHERE id = \$2",
             [hashedNewPassword, userId]
         );
 
@@ -170,18 +165,11 @@ const changePassword = async (req, res) => {
     }
 };
 
-module.exports = {
-    createUser,
-    loginUser,
-    getAllUsers,
-    updateProfile,
-    changePassword
-};
-// 6. إدارة صلاحيات المشرفين (للمديرين فقط)
+// 6. إدارة صلاحيات المشرفين (ترقية / إزالة إشراف)
 const toggleAdminRole = async (req, res) => {
     try {
-        const { email, makeAdmin } = req.body; // makeAdmin ستكون true للترقية أو false للإلغاء
-        const currentAdminId = req.user.id;
+        const { email, makeAdmin } = req.body; 
+        const currentAdminId = req.user.id; // المدير الذي ينفذ العملية حالياً
 
         if (!email?.trim()) {
             return res.status(400).json({ success: false, message: "يرجى إدخال البريد الإلكتروني للمستخدم" });
@@ -189,7 +177,7 @@ const toggleAdminRole = async (req, res) => {
 
         const normalizedEmail = email.trim().toLowerCase();
 
-        // التحقق من وجود المستخدم في قاعدة البيانات
+        // التأكد من وجود الحساب المستهدف
         const userResult = await pool.query("SELECT id, is_admin FROM users WHERE LOWER(email) = \$1", [normalizedEmail]);
 
         if (userResult.rows.length === 0) {
@@ -198,19 +186,28 @@ const toggleAdminRole = async (req, res) => {
 
         const targetUser = userResult.rows[0];
 
-        // حماية أمنية: منع المدير من إزالة صلاحيات نفسه بالخطأ!
+        // حماية أمنية: منع المدير من إزالة صلاحياته بنفسه بالخطأ!
         if (targetUser.id === currentAdminId && makeAdmin === false) {
             return res.status(403).json({ success: false, message: "لا يمكنك إلغاء صلاحيات الإدارة عن نفسك." });
         }
 
-        // تحديث حالة is_admin في قاعدة البيانات
+        // تحديث الصلاحية
         await pool.query("UPDATE users SET is_admin = \$1 WHERE id = \$2", [makeAdmin, targetUser.id]);
 
-        const actionText = makeAdmin ? "ترقيته إلى مدير منصة" : "إلغاء صلاحياته الإدارية وإعادته كطالب";
+        const actionText = makeAdmin ? "ترقيته إلى مدير منصة" : "إلغاء صلاحياته الإدارية";
         res.status(200).json({ success: true, message: `تم ${actionText} بنجاح.` });
 
     } catch (err) {
         console.error("Error in toggleAdminRole:", err.message);
         res.status(500).json({ success: false, message: "حدث خطأ في الخادم أثناء تعديل الصلاحيات." });
     }
+};
+
+module.exports = {
+    createUser,
+    loginUser,
+    getAllUsers,
+    updateProfile,
+    changePassword,
+    toggleAdminRole // تمت إضافة دالة الترقية هنا
 };
