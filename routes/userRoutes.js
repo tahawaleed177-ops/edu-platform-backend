@@ -40,4 +40,10 @@ router.post('/deadlines', verifyToken, verifyAdmin, userController.createDeadlin
 // 10. حذف موعد امتحان أو مهمة
 router.delete('/deadlines/:id', verifyToken, verifyAdmin, userController.deleteDeadline);
 
+// 11. مسار تسليم الواجبات للطالب
+router.post('/deadlines/:id/submit', verifyToken, userController.submitAssignment);
+
+// 12. مسار عرض التسليمات للمدير
+router.get('/deadlines/:id/submissions', verifyToken, verifyAdmin, userController.getAssignmentSubmissions);
+
 module.exports = router;

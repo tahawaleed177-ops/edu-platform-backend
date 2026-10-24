@@ -280,6 +280,71 @@ const deleteDeadline = async (req, res) => {
     }
 };
 
+// 11. تسليم واجب أو تقرير (للطالب)
+const submitAssignment = async (req, res) => {
+    try {
+        const deadlineId = req.params.id;
+        const userId = req.user.id;
+        const { file_url } = req.body;
+
+        if (!file_url?.trim()) {
+            return res.status(400).json({ success: false, message: "الرجاء إرفاق رابط التسليم" });
+        }
+
+        // إنشاء جدول التسليمات تلقائياً إذا لم يكن موجوداً
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS submissions (
+                id SERIAL PRIMARY KEY,
+                deadline_id INT REFERENCES deadlines(id) ON DELETE CASCADE,
+                user_id INT REFERENCES users(id) ON DELETE CASCADE,
+                file_url TEXT NOT NULL,
+                submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+
+        // التحقق مما إذا كان الطالب قد سلم مسبقاً لتحديث تسليمه، أو إدخال تسليم جديد
+        const existing = await pool.query("SELECT id FROM submissions WHERE deadline_id = $1 AND user_id = $2", [deadlineId, userId]);
+        
+        if (existing.rows.length > 0) {
+            await pool.query(
+                "UPDATE submissions SET file_url = $1, submitted_at = CURRENT_TIMESTAMP WHERE deadline_id = $2 AND user_id = $3",
+                [file_url.trim(), deadlineId, userId]
+            );
+        } else {
+            await pool.query(
+                "INSERT INTO submissions (deadline_id, user_id, file_url) VALUES ($1, $2, $3)",
+                [deadlineId, userId, file_url.trim()]
+            );
+        }
+
+        res.status(200).json({ success: true, message: "تم تسليم الواجب بنجاح! ✅" });
+    } catch (err) {
+        console.error("Error submitting assignment:", err.message);
+        res.status(500).json({ success: false, message: "حدث خطأ أثناء التسليم" });
+    }
+};
+
+// 12. عرض تسليمات الطلاب (للمدير)
+const getAssignmentSubmissions = async (req, res) => {
+    try {
+        const deadlineId = req.params.id;
+        
+        const result = await pool.query(`
+            SELECT s.id, s.file_url, s.submitted_at, u.full_name, u.email, u.study_type, u.section 
+            FROM submissions s
+            JOIN users u ON s.user_id = u.id
+            WHERE s.deadline_id = $1
+            ORDER BY s.submitted_at DESC
+        `, [deadlineId]);
+        
+        res.status(200).json({ success: true, submissions: result.rows });
+    } catch (err) {
+        console.error("Error fetching submissions:", err.message);
+        res.status(500).json({ success: false, message: "حدث خطأ أثناء جلب التسليمات" });
+    }
+};
+
+// === تحديث التصدير في نهاية الملف (استبدل القديم بهذا) ===
 module.exports = {
     createUser,
     loginUser,
@@ -290,5 +355,7 @@ module.exports = {
     getStudentsBySection,
     getDeadlines,
     createDeadline,
-    deleteDeadline
+    deleteDeadline,
+    submitAssignment,         // 👈 تمت الإضافة
+    getAssignmentSubmissions  // 👈 تمت الإضافة
 };
