@@ -16,17 +16,28 @@ router.get('/', userController.getAllUsers);
 
 // === المسارات المحمية للمستخدمين العاديين ===
 
-// 4. تحديث بيانات الملف الشخصي (الاسم)
+// 4. تحديث بيانات الملف الشخصي (الاسم، الدراسة، الشعبة)
 router.put('/profile', verifyToken, userController.updateProfile);
 
 // 5. تغيير كلمة المرور
 router.put('/change-password', verifyToken, userController.changePassword);
 
+// 6. جلب مواعيد الامتحانات والمهام القادمة (متاح للطلاب والمديرين)
+router.get('/deadlines', verifyToken, userController.getDeadlines);
+
 
 // === المسارات المحمية للمديرين فقط ===
 
-// 6. مسار إدارة المشرفين (يتطلب verifyToken + verifyAdmin)
+// 7. مسار إدارة المشرفين
 router.put('/admin-role', verifyToken, verifyAdmin, userController.toggleAdminRole);
 
+// 8. جلب الطلاب حسب الشعبة لنظام الحضور
 router.get('/section/:section', verifyToken, verifyAdmin, userController.getStudentsBySection);
+
+// 9. إضافة موعد امتحان أو مهمة جديدة
+router.post('/deadlines', verifyToken, verifyAdmin, userController.createDeadline);
+
+// 10. حذف موعد امتحان أو مهمة
+router.delete('/deadlines/:id', verifyToken, verifyAdmin, userController.deleteDeadline);
+
 module.exports = router;

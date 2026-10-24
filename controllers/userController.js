@@ -14,7 +14,7 @@ const createUser = async (req, res) => {
 
         const normalizedEmail = email.trim().toLowerCase();
 
-        const userExists = await pool.query("SELECT id FROM users WHERE LOWER(email) = \$1", [normalizedEmail]);
+        const userExists = await pool.query("SELECT id FROM users WHERE LOWER(email) = $1", [normalizedEmail]);
         if (userExists.rows.length > 0) {
             return res.status(400).json({ success: false, message: "البريد الإلكتروني مستخدم بالفعل" });
         }
@@ -23,7 +23,7 @@ const createUser = async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, salt);
 
         const new_user = await pool.query(
-            "INSERT INTO users (full_name, email, password_hash, is_admin) VALUES (\$1, \$2, \$3, FALSE) RETURNING id, full_name, email, is_admin, created_at",
+            "INSERT INTO users (full_name, email, password_hash, is_admin) VALUES ($1, $2, $3, FALSE) RETURNING id, full_name, email, is_admin, created_at",
             [name.trim(), normalizedEmail, hashedPassword]
         );
 
@@ -54,7 +54,7 @@ const loginUser = async (req, res) => {
 
         const normalizedEmail = email.trim().toLowerCase();
 
-        const userResult = await pool.query("SELECT id, full_name, email, password_hash, is_admin, study_type, section FROM users WHERE LOWER(email) = \$1", [normalizedEmail]);
+        const userResult = await pool.query("SELECT id, full_name, email, password_hash, is_admin, study_type, section FROM users WHERE LOWER(email) = $1", [normalizedEmail]);
         if (userResult.rows.length === 0) {
             return res.status(404).json({ success: false, message: "بيانات الدخول غير صحيحة" });
         }
@@ -103,7 +103,7 @@ const getAllUsers = async (req, res) => {
     }
 };
 
-// 4. تحديث اسم المستخدم (Profile)
+// 4. تحديث اسم المستخدم والبيانات الأكاديمية (Profile)
 const updateProfile = async (req, res) => {
     try {
         const { name, study_type, section } = req.body;
@@ -114,7 +114,7 @@ const updateProfile = async (req, res) => {
         }
 
         const updatedUser = await pool.query(
-            "UPDATE users SET full_name = \$1, study_type = \$2, section = \$3 WHERE id = \$4 RETURNING id, full_name, email, is_admin, study_type, section",
+            "UPDATE users SET full_name = $1, study_type = $2, section = $3 WHERE id = $4 RETURNING id, full_name, email, is_admin, study_type, section",
             [name.trim(), study_type || null, section || null, userId]
         );
 
@@ -146,7 +146,7 @@ const changePassword = async (req, res) => {
         const { currentPassword, newPassword } = req.body;
         const userId = req.user.id;
 
-        const userResult = await pool.query("SELECT password_hash FROM users WHERE id = \$1", [userId]);
+        const userResult = await pool.query("SELECT password_hash FROM users WHERE id = $1", [userId]);
         
         if (userResult.rows.length === 0) {
             return res.status(404).json({ success: false, message: "المستخدم غير موجود" });
@@ -163,7 +163,7 @@ const changePassword = async (req, res) => {
         const hashedNewPassword = await bcrypt.hash(newPassword, salt);
 
         await pool.query(
-            "UPDATE users SET password_hash = \$1 WHERE id = \$2",
+            "UPDATE users SET password_hash = $1 WHERE id = $2",
             [hashedNewPassword, userId]
         );
 
@@ -186,7 +186,7 @@ const toggleAdminRole = async (req, res) => {
 
         const normalizedEmail = email.trim().toLowerCase();
 
-        const userResult = await pool.query("SELECT id, is_admin FROM users WHERE LOWER(email) = \$1", [normalizedEmail]);
+        const userResult = await pool.query("SELECT id, is_admin FROM users WHERE LOWER(email) = $1", [normalizedEmail]);
 
         if (userResult.rows.length === 0) {
             return res.status(404).json({ success: false, message: "لا يوجد حساب مسجل بهذا البريد الإلكتروني." });
@@ -198,7 +198,7 @@ const toggleAdminRole = async (req, res) => {
             return res.status(403).json({ success: false, message: "لا يمكنك إلغاء صلاحيات الإدارة عن نفسك." });
         }
 
-        await pool.query("UPDATE users SET is_admin = \$1 WHERE id = \$2", [makeAdmin, targetUser.id]);
+        await pool.query("UPDATE users SET is_admin = $1 WHERE id = $2", [makeAdmin, targetUser.id]);
 
         const actionText = makeAdmin ? "ترقيته إلى مدير منصة" : "إلغاء صلاحياته الإدارية";
         res.status(200).json({ success: true, message: `تم ${actionText} بنجاح.` });
@@ -214,13 +214,69 @@ const getStudentsBySection = async (req, res) => {
     try {
         const { section } = req.params;
         const result = await pool.query(
-            "SELECT id, full_name, email, section, study_type FROM users WHERE section = \$1 AND is_admin = FALSE ORDER BY full_name ASC",
+            "SELECT id, full_name, email, section, study_type FROM users WHERE section = $1 AND is_admin = FALSE ORDER BY full_name ASC",
             [section]
         );
         res.status(200).json({ success: true, students: result.rows });
     } catch (err) {
         console.error("Error in getStudentsBySection:", err.message);
         res.status(500).json({ success: false, message: "حدث خطأ أثناء جلب قائمة الطلاب." });
+    }
+};
+
+// 8. جلب الامتحانات والمهام القادمة (Smart Deadlines)
+const getDeadlines = async (req, res) => {
+    try {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS deadlines (
+                id SERIAL PRIMARY KEY,
+                title VARCHAR(255) NOT NULL,
+                subject VARCHAR(255) NOT NULL,
+                category VARCHAR(50) DEFAULT 'امتحان',
+                section VARCHAR(20) DEFAULT 'الكل',
+                due_date TIMESTAMP NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+
+        const result = await pool.query(
+            "SELECT * FROM deadlines WHERE due_date >= NOW() - INTERVAL '1 day' ORDER BY due_date ASC"
+        );
+        res.status(200).json({ success: true, deadlines: result.rows });
+    } catch (err) {
+        console.error("Error in getDeadlines:", err.message);
+        res.status(500).json({ success: false, message: "حدث خطأ أثناء جلب المواعيد." });
+    }
+};
+
+// 9. إضافة موعد امتحان أو تسليم جديد (للمديرين)
+const createDeadline = async (req, res) => {
+    try {
+        const { title, subject, category, section, due_date } = req.body;
+        if (!title?.trim() || !subject?.trim() || !due_date) {
+            return res.status(400).json({ success: false, message: "يرجى ملء جميع الحقول المطلوبة." });
+        }
+
+        const result = await pool.query(
+            "INSERT INTO deadlines (title, subject, category, section, due_date) VALUES ($1, $2, $3, $4, $5) RETURNING *",
+            [title.trim(), subject.trim(), category || 'امتحان', section || 'الكل', due_date]
+        );
+        res.status(201).json({ success: true, message: "تمت إضافة الموعد بنجاح", deadline: result.rows[0] });
+    } catch (err) {
+        console.error("Error in createDeadline:", err.message);
+        res.status(500).json({ success: false, message: "حدث خطأ أثناء إضافة الموعد." });
+    }
+};
+
+// 10. حذف موعد (للمديرين)
+const deleteDeadline = async (req, res) => {
+    try {
+        const { id } = req.params;
+        await pool.query("DELETE FROM deadlines WHERE id = $1", [id]);
+        res.status(200).json({ success: true, message: "تم حذف الموعد بنجاح." });
+    } catch (err) {
+        console.error("Error in deleteDeadline:", err.message);
+        res.status(500).json({ success: false, message: "حدث خطأ أثناء حذف الموعد." });
     }
 };
 
@@ -231,5 +287,8 @@ module.exports = {
     updateProfile,
     changePassword,
     toggleAdminRole,
-    getStudentsBySection // 👈 دالة جلب الطلاب للحضور
+    getStudentsBySection,
+    getDeadlines,
+    createDeadline,
+    deleteDeadline
 };
